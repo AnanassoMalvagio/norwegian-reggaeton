@@ -6,43 +6,62 @@
 <title>Norwegian Reggaeton</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#111; overflow:hidden; font-family:'Arial Black',Arial,sans-serif; user-select:none; }
+body { background:#111; overflow:hidden; font-family:'Arial Black',Arial,sans-serif; user-select:none; touch-action:none; }
 #canvas { display:block; margin:0 auto; }
-#ui { position:fixed; top:0; left:0; width:100%; pointer-events:none; }
 #muteBtn {
-  position:fixed; top:12px; right:12px;
-  background:rgba(0,0,0,.7); color:#fff;
-  border:2px solid #fff; border-radius:8px;
-  padding:6px 14px; font-size:18px; cursor:pointer;
+  position:fixed; top:10px; right:10px;
+  background:rgba(0,0,0,.75); color:#fff;
+  border:2px solid rgba(255,255,255,.6); border-radius:8px;
+  padding:5px 12px; font-size:18px; cursor:pointer;
   pointer-events:all; z-index:100;
+  touch-action:manipulation;
 }
 #touchControls {
   position:fixed; bottom:0; left:0; width:100%;
-  display:none; justify-content:center; align-items:center;
-  padding-bottom:10px; gap:0; z-index:50; pointer-events:all;
+  display:none;
+  flex-direction:column; justify-content:center; align-items:center;
+  background:rgba(0,0,0,.78);
+  border-top:2px solid rgba(255,255,255,.12);
+  padding-top:8px;
+  padding-bottom:max(10px, env(safe-area-inset-bottom));
+  z-index:50; pointer-events:all;
+  height:var(--ctrl-h, 165px);
 }
+.tRow { display:flex; justify-content:center; align-items:center; }
 .tBtn {
-  width:80px; height:80px; border-radius:50%;
-  border:3px solid rgba(255,255,255,.5);
-  background:rgba(255,255,255,.15);
-  font-size:32px; display:flex; align-items:center; justify-content:center;
-  cursor:pointer; margin:5px;
+  width:82px; height:82px; border-radius:50%;
+  border:3px solid;
+  font-size:34px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; margin:3px;
   -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  transition:transform .07s, opacity .07s;
+  flex-shrink:0;
 }
-@media (max-width:700px) { #touchControls { display:flex; flex-wrap:wrap; } }
+.tBtn:active { transform:scale(.84); opacity:.65; }
+#tUp    { background:rgba(255,255,0,.28);  border-color:#ffff00; color:#ffff00; box-shadow:0 0 14px #ffff0066; }
+#tLeft  { background:rgba(255,51,153,.28); border-color:#ff3399; color:#ff3399; box-shadow:0 0 14px #ff339966; }
+#tDown  { background:rgba(0,255,204,.28);  border-color:#00ffcc; color:#00ffcc; box-shadow:0 0 14px #00ffcc66; }
+#tRight { background:rgba(0,170,255,.28);  border-color:#00aaff; color:#00aaff; box-shadow:0 0 14px #00aaff66; }
+/* spacer same size as a button to keep DOWN centred under UP */
+.tSpacer { width:82px; height:82px; margin:3px; flex-shrink:0; }
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
 <button id="muteBtn">🔊</button>
 <div id="touchControls">
-  <div style="display:flex;flex-direction:column;align-items:center;">
+  <!-- riga superiore: solo SU centrato -->
+  <div class="tRow">
+    <div class="tSpacer"></div>
     <div class="tBtn" id="tUp">▲</div>
-    <div style="display:flex;">
-      <div class="tBtn" id="tLeft">◄</div>
-      <div class="tBtn" id="tDown">▼</div>
-      <div class="tBtn" id="tRight">►</div>
-    </div>
+    <div class="tSpacer"></div>
+  </div>
+  <!-- riga inferiore: SINISTRA  GIÙ  DESTRA -->
+  <div class="tRow">
+    <div class="tBtn" id="tLeft">◄</div>
+    <div class="tBtn" id="tDown">▼</div>
+    <div class="tBtn" id="tRight">►</div>
   </div>
 </div>
 <script>
@@ -51,11 +70,29 @@ body { background:#111; overflow:hidden; font-family:'Arial Black',Arial,sans-se
 // ─────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+
+// Detect touch device once; re-checked on resize
+function hasTouchScreen(){
+  return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+}
+
+const CTRL_H_PX = 165; // height of the on-screen D-pad panel
+
 function resize(){
-  const s = Math.min(window.innerWidth, window.innerHeight*0.98, 520);
+  const tc = document.getElementById('touchControls');
+  const touch = hasTouchScreen();
+  if(tc) tc.style.display = touch ? 'flex' : 'none';
+
+  const availW = window.innerWidth;
+  const availH = window.innerHeight - (touch ? CTRL_H_PX : 0);
+  // Scale canvas to fit available area, preserving 480×720 aspect ratio
+  const scale = Math.min(availW / 480, availH / 720, 1.1); // cap at ~528px wide
+  const dispW = Math.floor(480 * scale);
+  const dispH = Math.floor(720 * scale);
+
   canvas.width = 480; canvas.height = 720;
-  canvas.style.width = s+'px';
-  canvas.style.height = (s/480*720)+'px';
+  canvas.style.width  = dispW + 'px';
+  canvas.style.height = dispH + 'px';
 }
 resize(); window.addEventListener('resize', resize);
 
@@ -1018,12 +1055,24 @@ canvas.addEventListener('click', e=>{
   handleClick(cx,cy);
 });
 
-['tLeft','tDown','tUp','tRight'].forEach((id,i)=>{
-  const dirs=['left','down','up','right'];
-  const el=document.getElementById(id);
+// Map button id → direction
+const BTN_DIR = {tLeft:'left', tDown:'down', tUp:'up', tRight:'right'};
+Object.entries(BTN_DIR).forEach(([id, dir])=>{
+  const el = document.getElementById(id);
   if(!el) return;
-  el.addEventListener('touchstart',e=>{ e.preventDefault(); initAudio(); pressDir(dirs[i]); },{passive:false});
-  el.addEventListener('mousedown',e=>{ e.preventDefault(); initAudio(); pressDir(dirs[i]); });
+  // Touch: fire on touchstart for instant response, prevent ghost clicks
+  el.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    initAudio();
+    pressDir(dir);
+  }, {passive:false});
+  // Mouse fallback (desktop testing)
+  el.addEventListener('mousedown', e=>{
+    e.preventDefault();
+    initAudio();
+    pressDir(dir);
+  });
 });
 
 function handleClick(cx,cy){
@@ -1048,15 +1097,20 @@ function handleAction(){
   else if(state==='victory'){ state='title'; stopBGM(); }
 }
 
-// Touch-to-start
+// Touch-to-start (tap on canvas for menu screens)
 canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
   initAudio();
   const touch=e.touches[0];
   const rect=canvas.getBoundingClientRect();
   const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
   const cx=(touch.clientX-rect.left)*sx, cy=(touch.clientY-rect.top)*sy;
   handleClick(cx,cy);
-},{passive:true});
+},{passive:false});
+
+// Prevent browser scroll/zoom during gameplay
+document.addEventListener('touchmove', e=>{ e.preventDefault(); },{passive:false});
+document.addEventListener('gesturestart', e=>{ e.preventDefault(); },{passive:false});
 </script>
 </body>
 </html>
