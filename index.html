@@ -130,6 +130,10 @@ function playSfx(type){
   if(type==='combo'){   [440,550,660,880].forEach((f,i)=>setTimeout(()=>beep(f,.1,'square',.2),i*60)); }
   if(type==='gameover'){ [300,250,200,150].forEach((f,i)=>setTimeout(()=>beep(f,.18,'sawtooth',.25),i*120)); }
   if(type==='win'){     [440,550,660,770,880].forEach((f,i)=>setTimeout(()=>beep(f,.1,'square',.22),i*70)); }
+  if(type==='thunder'){ beep(80,.4,'sawtooth',.35); setTimeout(()=>beep(60,.6,'sawtooth',.28),120); }
+  if(type==='thorwin'){ [523,659,784,988,1047].forEach((f,i)=>setTimeout(()=>beep(f,.14,'square',.24),i*80)); }
+  if(type==='thorfail'){ beep(280,.12,'sawtooth',.3); setTimeout(()=>beep(140,.35,'sawtooth',.28),110); setTimeout(()=>beep(70,.5,'sawtooth',.22),270); }
+  if(type==='odin'){ [660,880,1100].forEach((f,i)=>setTimeout(()=>beep(f,.08,'square',.18),i*55)); }
 }
 
 // BGM: reggaeton 8-bit
@@ -230,6 +234,13 @@ let lastTime = 0;
 let particles = [];
 let bubbleMsg = null; // {text, timer, big}
 let pressedKeys = {};
+// ─── GAG STATE ───
+let cutsceneStep = 0, cutsceneTimer = 0;
+let odinVisible = false, odinTimer = 0;
+let gameOverAnimT = 0;
+let thorSequence = [], thorShowIdx = 0, thorShowTimer = 0;
+let thorPhase = 'show'; // 'show'|'play'|'result'
+let thorInput = [], thorResult = null, thorResultTimer = 0;
 
 // ─────────────────────────────────────────────
 // ARROW GENERATION
@@ -426,6 +437,174 @@ function drawLimb(ctx, x, y, baseAngle, angle, len, w, col, col2){
   ctx.fillStyle = grad;
   ctx.beginPath(); ctx.roundRect(-w/2, 0, w, len, w/2); ctx.fill();
   ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+// ODIN IN DISCOTECA
+// ─────────────────────────────────────────────
+function drawOdin(t, ox, oy){
+  if(!odinVisible) return;
+  if(ox===undefined){ ox=72; oy=H*.60; }
+  ctx.save();
+  const bounce=Math.sin(t*6)*4;
+  const sway=Math.sin(t*3)*6;
+  ctx.translate(ox+sway, oy+bounce);
+
+  // Robe
+  ctx.fillStyle='#334466';
+  ctx.beginPath(); ctx.roundRect(-22,-5,44,40,7); ctx.fill();
+  ctx.fillStyle='#c8a000'; ctx.fillRect(-22,6,44,4);
+
+  // Legs
+  drawLimb(ctx,-10,35,0, Math.sin(t*6)*.4, 28,9,'#334466','#223355');
+  drawLimb(ctx, 10,35,0,-Math.sin(t*6)*.4, 28,9,'#334466','#223355');
+
+  // Arms – disco pose
+  const la=-1.8+Math.sin(t*5)*.3, ra=2.0-Math.sin(t*5)*.3;
+  drawLimb(ctx,-23,-4,Math.PI+.3,la,26,8,'#e0b07a','#c09060');
+  drawLimb(ctx, 23,-4,Math.PI-.3,ra,26,8,'#e0b07a','#c09060');
+
+  // Head
+  ctx.save(); ctx.translate(0,-24);
+  ctx.fillStyle='#e0b07a';
+  ctx.beginPath(); ctx.ellipse(0,0,20,22,0,0,Math.PI*2); ctx.fill();
+  // White beard
+  ctx.fillStyle='#ddd';
+  ctx.beginPath(); ctx.ellipse(0,15,14,10,0,0,Math.PI); ctx.fill();
+  for(let i=-2;i<=2;i++){
+    ctx.beginPath(); ctx.moveTo(i*5,15); ctx.lineTo(i*4-2,30);
+    ctx.lineWidth=3; ctx.strokeStyle='#bbb'; ctx.stroke();
+  }
+  // Helmet
+  ctx.fillStyle='#aaa';
+  ctx.beginPath(); ctx.ellipse(0,-10,22,14,0,Math.PI,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ccc'; ctx.fillRect(-24,-10,48,4);
+  // Horns
+  ctx.fillStyle='#fff8e0';
+  ctx.beginPath(); ctx.moveTo(-20,-10); ctx.quadraticCurveTo(-36,-26,-26,-36); ctx.quadraticCurveTo(-18,-24,-20,-10); ctx.fill();
+  ctx.beginPath(); ctx.moveTo( 20,-10); ctx.quadraticCurveTo( 36,-26, 26,-36); ctx.quadraticCurveTo( 18,-24, 20,-10); ctx.fill();
+  // Eye patch (left)
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.ellipse(-8,-3,7,5,-.2,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#444'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-15,-6); ctx.lineTo(-1,-1); ctx.stroke();
+  // Cool sunglasses (right)
+  ctx.fillStyle='rgba(0,220,255,.75)';
+  ctx.beginPath(); ctx.ellipse(8,-3,7,5,.1,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#222'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.ellipse(-8,-3,8,6,0,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse( 8,-3,8,6,0,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-1,-3); ctx.lineTo(1,-3); ctx.stroke(); // bridge
+  // Spinning disco ball above head
+  ctx.save(); ctx.translate(5,-48);
+  ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,-8); ctx.lineTo(0,0); ctx.stroke();
+  for(let i=0;i<10;i++){
+    const a=i/10*Math.PI*2+t*2;
+    const h=i*36;
+    ctx.fillStyle=`hsl(${h},100%,65%)`;
+    ctx.beginPath(); ctx.arc(Math.cos(a)*10, Math.sin(a)*10,3,0,Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle='#eee'; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  ctx.restore(); // head
+  ctx.restore(); // odin
+}
+
+// ─────────────────────────────────────────────
+// THOR
+// ─────────────────────────────────────────────
+function drawThor(x, y, move, t, showMjolnir=true){
+  ctx.save();
+  ctx.translate(x, y);
+  let bx=0,by=0,headTilt=0,lA=-.5,rA=.5,lL=.2,rL=-.2,bounce=0;
+  if(move==='up'){    by=-12; lA=-2.2; rA=2.2; lL=.5; rL=.5; bounce=6; }
+  else if(move==='down'){  by=10; lA=-.2; rA=.2; lL=-.2; rL=.2; bounce=-4; ctx.scale(1.1,.88); }
+  else if(move==='left'){  bx=-10; lA=-1.3; rA=1.5; lL=.6; rL=-.1; bounce=Math.sin(t*8)*4; headTilt=-.2; }
+  else if(move==='right'){ bx=10; lA=-1.5; rA=1.3; lL=.1; rL=-.6; bounce=Math.sin(t*8)*4; headTilt=.2; }
+  else if(move==='hit'){   headTilt=.3; lA=-2.8; rA=.4; by=8; }
+  else { bounce=Math.sin(t*3)*2; lA=-.3+Math.sin(t*2)*.1; rA=.3-Math.sin(t*2)*.1; }
+
+  ctx.translate(bx, by+bounce);
+
+  // Cape (red)
+  ctx.fillStyle='#cc2200';
+  ctx.beginPath();
+  ctx.moveTo(-24,-8); ctx.quadraticCurveTo(-38,20,-28,55);
+  ctx.lineTo(-15,52); ctx.quadraticCurveTo(-26,22,-10,2); ctx.closePath(); ctx.fill();
+
+  // Legs
+  drawLimb(ctx,-12,22,0,lL,34,11,'#4a4a6a','#333350');
+  drawLimb(ctx, 12,22,0,rL,34,11,'#4a4a6a','#333350');
+  // Boots (iron)
+  ctx.fillStyle='#888';
+  ctx.beginPath(); ctx.ellipse(-12+Math.sin(lL)*34,22+Math.cos(lL)*34-5,13,9,lL,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 12+Math.sin(rL)*34,22+Math.cos(rL)*34-5,13,9,rL,0,Math.PI*2); ctx.fill();
+
+  // Body (silver armor)
+  ctx.fillStyle='#778899';
+  ctx.beginPath(); ctx.roundRect(-24,-12,48,36,9); ctx.fill();
+  ctx.fillStyle='#99aabb';
+  ctx.beginPath(); ctx.roundRect(-18,-10,36,10,5); ctx.fill();
+
+  // Arms
+  drawLimb(ctx,-26,-8,Math.PI+.3,lA,30,10,'#778899','#556677');
+  drawLimb(ctx, 26,-8,Math.PI-.3,rA,30,10,'#778899','#556677');
+
+  // Mjolnir in right hand
+  if(showMjolnir){
+    const mx=26+Math.sin(rA)*30, my=-8+Math.cos(rA)*30;
+    ctx.save(); ctx.translate(mx,my); ctx.rotate(rA+Math.PI*.5);
+    ctx.fillStyle='#aaa'; ctx.fillRect(-4,-5,8,22); // handle
+    ctx.fillStyle='#999'; ctx.fillRect(-14,-20,28,18); ctx.fillStyle='#bbb';
+    ctx.fillRect(-12,-18,26,8);
+    if(move==='hit'){
+      ctx.shadowColor='#ffffaa'; ctx.shadowBlur=20;
+      ctx.strokeStyle='#ffff44'; ctx.lineWidth=2;
+      for(let i=0;i<4;i++){
+        const a=i/4*Math.PI*2;
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*22,Math.sin(a)*22); ctx.stroke();
+      }
+      ctx.shadowBlur=0;
+    }
+    ctx.restore();
+  }
+
+  // Head
+  ctx.save(); ctx.translate(0,-24); ctx.rotate(headTilt);
+  ctx.fillStyle='#f5c88a';
+  ctx.beginPath(); ctx.ellipse(0,0,22,24,0,0,Math.PI*2); ctx.fill();
+  // Blonde beard
+  ctx.fillStyle='#f0c040';
+  ctx.beginPath(); ctx.ellipse(0,16,16,10,0,0,Math.PI); ctx.fill();
+  for(let i=-2;i<=2;i++){
+    ctx.beginPath(); ctx.moveTo(i*5,16); ctx.lineTo(i*5-2,28);
+    ctx.lineWidth=3; ctx.strokeStyle='#e8b800'; ctx.stroke();
+  }
+  // Winged helmet
+  ctx.fillStyle='#aaa';
+  ctx.beginPath(); ctx.ellipse(0,-12,24,16,0,Math.PI,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ccc'; ctx.fillRect(-26,-12,52,5);
+  // Wings
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.moveTo(-22,-14); ctx.quadraticCurveTo(-42,-18,-38,-8); ctx.quadraticCurveTo(-28,-10,-22,-14); ctx.fill();
+  ctx.beginPath(); ctx.moveTo( 22,-14); ctx.quadraticCurveTo( 42,-18, 38,-8); ctx.quadraticCurveTo( 28,-10, 22,-14); ctx.fill();
+  // Eyes
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.ellipse(-9,-4,6,7,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 9,-4,6,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1144cc';
+  ctx.beginPath(); ctx.ellipse(-9,-4,3,4,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 9,-4,3,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.ellipse(-8,-5,1,1.5,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,-5,1,1.5,0,0,Math.PI*2); ctx.fill();
+  // Mouth
+  ctx.strokeStyle='#a00'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.arc(0,8,6,0,Math.PI); ctx.stroke();
+  ctx.restore(); // head
+  ctx.restore(); // thor
 }
 
 // ─────────────────────────────────────────────
@@ -717,6 +896,299 @@ function drawHUD(){
 }
 
 // ─────────────────────────────────────────────
+// CUTSCENE INIZIALE
+// ─────────────────────────────────────────────
+const CUTSCENE_PANELS = [
+  {
+    title:'Il Vichingo e il Viaggio Sbagliato',
+    lines:['Il nostro eroe salpa verso il Canada...', 'pieno di sogni e aringhe.'],
+    draw(t){
+      // Ship
+      ctx.fillStyle='#8B4513';
+      ctx.beginPath(); ctx.moveTo(W*.2,H*.62); ctx.lineTo(W*.8,H*.62); ctx.lineTo(W*.75,H*.72); ctx.lineTo(W*.25,H*.72); ctx.closePath(); ctx.fill();
+      // Sail
+      ctx.fillStyle='#ddeeff';
+      ctx.beginPath(); ctx.moveTo(W*.5,H*.38); ctx.lineTo(W*.5,H*.62); ctx.lineTo(W*.7,H*.62); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#cc2200'; ctx.fillRect(W*.48,H*.38,5,H*.24);
+      // Thought bubble: Canada
+      ctx.fillStyle='#fff'; ctx.strokeStyle='#333'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.roundRect(W*.52,H*.22,W*.35,70,14); ctx.fill(); ctx.stroke();
+      for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(W*.52+(i*12),H*.32+i*5,5-i,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle='#111'; ctx.font='bold 16px "Arial Black",Arial'; ctx.textAlign='center';
+      ctx.fillText('Destinazione:', W*.69, H*.27);
+      ctx.fillText('CANADA! 🍁', W*.69, H*.3);
+      // Viking on ship
+      drawViking(W*.45, H*.55, 'idle', t);
+    }
+  },
+  {
+    title:'Colpo di Vento!',
+    lines:['Una tempesta imprevista colpisce la nave...', 'La bussola impazzisce!'],
+    draw(t){
+      // Stormy sky
+      ctx.fillStyle='rgba(30,20,60,.4)'; ctx.fillRect(0,0,W,H*.65);
+      // Lightning
+      if(Math.sin(t*7)>0.6){
+        ctx.strokeStyle='#ffff44'; ctx.lineWidth=4;
+        ctx.beginPath(); ctx.moveTo(W*.3,H*.1); ctx.lineTo(W*.25,H*.28); ctx.lineTo(W*.32,H*.28); ctx.lineTo(W*.26,H*.45); ctx.stroke();
+      }
+      // Ship tilted in storm
+      ctx.save(); ctx.translate(W*.5,H*.65); ctx.rotate(Math.sin(t*3)*.15);
+      ctx.fillStyle='#8B4513';
+      ctx.beginPath(); ctx.moveTo(-130,0); ctx.lineTo(130,0); ctx.lineTo(110,60); ctx.lineTo(-110,60); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#ddeeff';
+      ctx.beginPath(); ctx.moveTo(0,-110); ctx.lineTo(0,0); ctx.lineTo(150,0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#cc2200'; ctx.fillRect(-3,-110,5,110);
+      drawViking(0,-15,'fail_fall',t);
+      ctx.restore();
+      // Map arrow going wrong way
+      ctx.fillStyle='#ff4400'; ctx.font='bold 22px Arial'; ctx.textAlign='center';
+      ctx.fillText('↙ Colombia invece di Canada!', W*.5, H*.18);
+    }
+  },
+  {
+    title:'Arrivo in Colombia!',
+    lines:['La nave attracca su una spiaggia tropicale.', 'Musica strana... ma accattivante!'],
+    draw(t){
+      // Tropical scene (already drawn by drawBackground but add dancers)
+      // Colorful stick-figure dancers
+      const cols=['#ff3399','#ffdd00','#00ffcc','#ff6600'];
+      for(let i=0;i<4;i++){
+        const dx=W*.25+i*W*.17, bounce=Math.abs(Math.sin(t*4+i))* -20;
+        ctx.fillStyle=cols[i];
+        ctx.beginPath(); ctx.arc(dx, H*.62+bounce,14,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle=cols[i]; ctx.lineWidth=4;
+        ctx.beginPath(); ctx.moveTo(dx,H*.62+bounce+14); ctx.lineTo(dx,H*.62+bounce+38); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(dx,H*.62+bounce+22); ctx.lineTo(dx-16+Math.sin(t*4+i)*10,H*.62+bounce+34); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(dx,H*.62+bounce+22); ctx.lineTo(dx+16-Math.sin(t*4+i)*10,H*.62+bounce+34); ctx.stroke();
+      }
+      // Music notes floating
+      ctx.font='24px Arial'; ctx.fillStyle='#ffdd00';
+      ['♪','♫','♩','♬'].forEach((n,i)=>{
+        ctx.fillText(n, W*.15+i*W*.22, H*.5+Math.sin(t*2+i)* -15);
+      });
+      // Viking watching, amazed
+      drawViking(W*.5, H*.7,'idle',t);
+      // Amazement bubble
+      ctx.fillStyle='#fff'; ctx.strokeStyle='#333'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.roundRect(W*.52,H*.42,W*.4,55,12); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#333'; ctx.font='bold 14px "Arial Black",Arial'; ctx.textAlign='center';
+      ctx.fillText('Che cos\'è questa',W*.72,H*.46);
+      ctx.fillText('musica assurda?! 😲',W*.72,H*.49);
+    }
+  },
+  {
+    title:'FOLGORAZIONE MUSICALE!',
+    lines:['Il reggaeton colpisce il Vichingo come un fulmine.', 'Non tornerà mai più in Norvegia.'],
+    draw(t){
+      // Lightning bolt from sky to viking
+      ctx.strokeStyle='#ffff00'; ctx.lineWidth=6;
+      ctx.shadowColor='#ffff00'; ctx.shadowBlur=20;
+      ctx.beginPath();
+      ctx.moveTo(W*.5,H*.1); ctx.lineTo(W*.44,H*.3); ctx.lineTo(W*.52,H*.3);
+      ctx.lineTo(W*.46,H*.5); ctx.lineTo(W*.54,H*.5); ctx.lineTo(W*.48,H*.65);
+      ctx.stroke(); ctx.shadowBlur=0;
+      // Viking in combo pose, glowing
+      ctx.save(); ctx.shadowColor='#ffff44'; ctx.shadowBlur=30;
+      drawViking(W*.5,H*.72,'combo',t);
+      ctx.restore();
+      // Big text
+      const pulse=.5+.5*Math.sin(t*6);
+      ctx.font=`bold ${28+pulse*6}px "Arial Black",Arial`;
+      ctx.fillStyle=`hsl(${t*120%360},100%,60%)`;
+      ctx.textAlign='center';
+      ctx.shadowColor='#ff00ff'; ctx.shadowBlur=15;
+      ctx.fillText('REGGAETON FOREVER! 🎵',W*.5,H*.28);
+      ctx.shadowBlur=0;
+    }
+  }
+];
+
+function drawCutscene(dt){
+  cutsceneTimer+=dt;
+  // Auto-advance every 4s
+  if(cutsceneTimer>=4){ cutsceneTimer=0; cutsceneStep++; if(cutsceneStep>=4){ startLevel(0); return; } }
+  const p=CUTSCENE_PANELS[cutsceneStep];
+  // Panel bg
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(0,0,W,H);
+  // Draw panel scene
+  p.draw(bgTimer);
+  // Panel border
+  ctx.strokeStyle='#ff00ff'; ctx.lineWidth=4;
+  ctx.shadowColor='#ff00ff'; ctx.shadowBlur=12;
+  ctx.beginPath(); ctx.roundRect(16,16,W-32,H-110,14); ctx.stroke();
+  ctx.shadowBlur=0;
+  // Panel counter dots
+  for(let i=0;i<4;i++){
+    ctx.fillStyle=i===cutsceneStep?'#ff00ff':'#555';
+    ctx.beginPath(); ctx.arc(W/2-45+i*30,H-88,7,0,Math.PI*2); ctx.fill();
+  }
+  // Title bar
+  ctx.fillStyle='rgba(0,0,20,.85)';
+  ctx.beginPath(); ctx.roundRect(20,22,W-40,36,8); ctx.fill();
+  ctx.fillStyle='#ffdd00'; ctx.font='bold 16px "Arial Black",Arial'; ctx.textAlign='center';
+  ctx.fillText(p.title, W/2, 46);
+  // Subtitle lines
+  ctx.fillStyle='rgba(0,0,10,.7)';
+  ctx.beginPath(); ctx.roundRect(20,H*.82,W-40,52,8); ctx.fill();
+  ctx.fillStyle='#ddf'; ctx.font='14px Arial'; ctx.textAlign='center';
+  p.lines.forEach((l,i)=> ctx.fillText(l, W/2, H*.85+i*20));
+
+  // Progress bar
+  ctx.fillStyle='rgba(255,255,255,.2)'; ctx.fillRect(20,H-104,W-40,6);
+  ctx.fillStyle='#ff00ff'; ctx.fillRect(20,H-104,(W-40)*(cutsceneTimer/4),6);
+
+  // Salta intro button
+  ctx.fillStyle='rgba(40,40,60,.92)'; ctx.strokeStyle='#aaa'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.roundRect(W/2-80,H-82,160,42,20); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 16px "Arial Black",Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('⏭  Salta intro', W/2, H-61);
+  ctx.textBaseline='alphabetic';
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+// THOR BONUS STAGE
+// ─────────────────────────────────────────────
+function startThorBonus(){
+  thorSequence=Array.from({length:4},()=>DIRS[Math.floor(Math.random()*4)]);
+  thorShowIdx=0; thorShowTimer=1.5;
+  thorPhase='show'; thorInput=[]; thorResult=null; thorResultTimer=0;
+  state='thorbonus';
+  playSfx('thunder');
+}
+
+function updateThorBonus(dt){
+  if(thorPhase==='show'){
+    thorShowTimer-=dt;
+    if(thorShowTimer<=0){
+      thorShowIdx++;
+      if(thorShowIdx>=thorSequence.length){ thorPhase='play'; thorInput=[]; }
+      else thorShowTimer=1.2;
+    }
+  }
+  if(thorPhase==='result'){
+    thorResultTimer-=dt;
+    if(thorResultTimer<=0) startLevel(level+1);
+  }
+}
+
+function pressThorDir(dir){
+  if(thorPhase!=='play') return;
+  thorInput.push(dir);
+  const idx=thorInput.length-1;
+  if(thorInput[idx]!==thorSequence[idx]){
+    thorResult='fail'; thorPhase='result'; thorResultTimer=3.5;
+    playSfx('thorfail');
+  } else if(thorInput.length===thorSequence.length){
+    thorResult='win'; thorPhase='result'; thorResultTimer=3.5;
+    score+=500;
+    playSfx('thorwin');
+  } else {
+    playSfx('perfect');
+  }
+}
+
+function drawThorBonus(dt){
+  ctx.save();
+  // Dark overlay
+  ctx.fillStyle='rgba(0,0,20,.78)'; ctx.fillRect(0,0,W,H);
+
+  const thorX=W*.38, thorY=H*.56;
+
+  if(thorPhase==='show'){
+    // Thor demonstrates the sequence
+    const move = thorSequence[thorShowIdx];
+    const t=bgTimer;
+    drawThor(thorX, thorY, move, t, true);
+    // Arrow indicator what Thor is showing
+    const col=COLORS[move];
+    ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=20;
+    drawArrow(thorX+90, thorY-30, move, col, 1, 1.4);
+    ctx.restore();
+    // Header
+    ctx.fillStyle='rgba(0,0,30,.9)'; ctx.strokeStyle='#ffdd00'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(20,50,W-40,100,14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#ffdd00'; ctx.font='bold 20px "Arial Black",Arial'; ctx.textAlign='center';
+    ctx.fillText('⚡ BONUS STAGE: THOR BALLA! ⚡', W/2, 85);
+    ctx.fillStyle='#aaffcc'; ctx.font='15px Arial';
+    ctx.fillText('Osserva le mosse di Thor…', W/2, 112);
+    ctx.fillText(`Mossa ${thorShowIdx+1} di ${thorSequence.length}`, W/2, 135);
+
+    // Sequence dots shown so far
+    for(let i=0;i<=thorShowIdx;i++){
+      const col2=COLORS[thorSequence[i]];
+      ctx.fillStyle=col2; ctx.beginPath();
+      ctx.arc(W/2-45+i*30, H*.85, 10, 0, Math.PI*2); ctx.fill();
+    }
+
+  } else if(thorPhase==='play'){
+    drawThor(thorX, thorY, 'idle', bgTimer, true);
+    ctx.fillStyle='rgba(0,0,30,.9)'; ctx.strokeStyle='#00ffcc'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(20,50,W-40,105,14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#00ffcc'; ctx.font='bold 18px "Arial Black",Arial'; ctx.textAlign='center';
+    ctx.fillText('ORA TOCCA A TE!', W/2, 82);
+    ctx.fillStyle='#ddf'; ctx.font='14px Arial';
+    ctx.fillText('Riproduci la sequenza di mosse', W/2, 108);
+    ctx.fillText(`Inserita: ${thorInput.length} / ${thorSequence.length}`, W/2, 132);
+    // Ghost arrows of what's been input
+    thorInput.forEach((dir,i)=>{
+      const col2=COLORS[dir];
+      ctx.save(); ctx.globalAlpha=.6;
+      drawArrow(W*.15+i*55, H*.82, dir, col2, 1, .9);
+      ctx.restore();
+    });
+    // Next expected ghost
+    if(thorInput.length<thorSequence.length){
+      const nextDir=thorSequence[thorInput.length];
+      const col2=COLORS[nextDir];
+      ctx.save(); ctx.globalAlpha=.25;
+      drawArrow(COL_X[nextDir], ARROW_Y_HIT, nextDir, col2, 1, 1, true);
+      ctx.restore();
+      // Hit zone flash
+      ctx.strokeStyle=col2; ctx.lineWidth=3;
+      ctx.shadowColor=col2; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.arc(COL_X[nextDir], ARROW_Y_HIT, 28, 0, Math.PI*2); ctx.stroke();
+      ctx.shadowBlur=0;
+    }
+
+  } else if(thorPhase==='result'){
+    const win=thorResult==='win';
+    drawThor(thorX, thorY, win?'up':'hit', bgTimer, true);
+    // Viking reaction
+    drawViking(W*.72, thorY, win?'combo':'fail_fall', bgTimer);
+    // Result bubble
+    ctx.fillStyle=win?'rgba(0,40,0,.95)':'rgba(40,0,0,.95)';
+    ctx.strokeStyle=win?'#00ff88':'#ff2244'; ctx.lineWidth=5;
+    ctx.shadowColor=win?'#00ff88':'#ff2244'; ctx.shadowBlur=20;
+    ctx.beginPath(); ctx.roundRect(20,55,W-40,130,16); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+    if(win){
+      ctx.fillStyle='#ffdd00'; ctx.font='bold 20px "Arial Black",Arial'; ctx.textAlign='center';
+      ctx.fillText('Thor approva il reggaeton! ⚡', W/2, 100);
+      ctx.fillStyle='#aaffcc'; ctx.font='16px Arial';
+      ctx.fillText('Mjolnir colpisce il ritmo!', W/2, 130);
+      ctx.fillText('Bonus +500 punti!', W/2, 157);
+    } else {
+      ctx.fillStyle='#ff4488'; ctx.font='bold 18px "Arial Black",Arial'; ctx.textAlign='center';
+      ctx.fillText('Mjolnir non mente:', W/2, 95);
+      ctx.fillStyle='#ffdd00'; ctx.font='bold 20px "Arial Black",Arial';
+      ctx.fillText('sei una frana! 🔨', W/2, 128);
+      ctx.fillStyle='#ffc'; ctx.font='14px Arial';
+      ctx.fillText('Continua comunque…', W/2, 160);
+    }
+    ctx.fillStyle='rgba(255,255,255,.45)'; ctx.font='13px Arial'; ctx.textAlign='center';
+    ctx.fillText(`(continua tra ${Math.max(0,Math.ceil(thorResultTimer))}s)`, W/2, H-55);
+  }
+
+  // HUD top
+  ctx.fillStyle='#aaffff'; ctx.font='bold 16px Arial'; ctx.textAlign='center';
+  ctx.fillText(`Livello ${level+1} superato — Bonus Stage!`, W/2, 30);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
 // TITLE SCREEN
 // ─────────────────────────────────────────────
 function drawTitle(dt){
@@ -773,31 +1245,77 @@ function drawTitle(dt){
 // ─────────────────────────────────────────────
 function drawGameOver(){
   ctx.save();
-  ctx.fillStyle='rgba(0,0,0,.7)'; ctx.fillRect(0,0,W,H);
-  drawViking(W/2, H*.42, 'fail_fall', bgTimer);
-  // Speech bubble - Odino
-  ctx.fillStyle='rgba(20,0,30,.95)';
-  ctx.strokeStyle='#ff0044'; ctx.lineWidth=5;
-  ctx.shadowColor='#ff0044'; ctx.shadowBlur=20;
-  ctx.beginPath(); ctx.roundRect(20,60,W-40,160,18); ctx.fill(); ctx.stroke();
-  ctx.shadowBlur=0;
-  ctx.fillStyle='#ff4488'; ctx.font='bold 16px "Arial Black",Arial';
-  ctx.textAlign='center';
-  ctx.fillText('Hai profanato la Tumba', W/2, 105);
-  ctx.fillText('al ritmo della Rumba:', W/2, 128);
-  ctx.fillStyle='#ffdd00'; ctx.font='bold 18px "Arial Black",Arial';
-  ctx.fillText('ODINO DISAPPROVA! ⚡', W/2, 158);
-  ctx.fillStyle='#aaa'; ctx.font='14px Arial';
-  ctx.fillText('Punteggio: '+score, W/2, 195);
+  ctx.fillStyle='rgba(0,0,0,.72)'; ctx.fillRect(0,0,W,H);
 
-  // Retry
-  ctx.fillStyle='rgba(200,50,50,.9)';
-  ctx.strokeStyle='#fff'; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.roundRect(W/2-100,H-180,200,52,26); ctx.fill(); ctx.stroke();
-  ctx.fillStyle='#fff'; ctx.font='bold 20px "Arial Black",Arial';
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('🔄  RIPROVA', W/2, H-154);
-  ctx.textBaseline='alphabetic';
+  const t=gameOverAnimT;
+  const CATAPULT_DUR=1.8;
+
+  if(t < CATAPULT_DUR){
+    // Viking flies toward top-right (fjords direction) like a catapult
+    const prog=t/CATAPULT_DUR;
+    const easeProg=1-(1-prog)*(1-prog);
+    const vx=W*.5 + easeProg*(W*.6);
+    const vy=H*.7 - Math.sin(prog*Math.PI)*H*.55; // parabola arc
+    const rot=prog*Math.PI*2.5;
+    ctx.save();
+    ctx.translate(vx, vy);
+    ctx.rotate(rot);
+    drawViking(0, 0, 'fail_fall', bgTimer);
+    // Trail
+    ctx.fillStyle='rgba(255,200,100,.18)';
+    for(let i=1;i<=5;i++){
+      const tp=(t-i*.06)/CATAPULT_DUR;
+      if(tp<0) continue;
+      const tx2=W*.5+(1-(1-tp)*(1-tp))*(W*.6)-vx;
+      const ty2=H*.7-Math.sin((tp)*Math.PI)*H*.55-vy;
+      ctx.beginPath(); ctx.arc(tx2,ty2,7-i,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+    // Speed lines
+    ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=2;
+    for(let i=0;i<6;i++){
+      ctx.beginPath();
+      ctx.moveTo(vx-40-i*12, vy+i*8);
+      ctx.lineTo(vx-80-i*18, vy+i*8);
+      ctx.stroke();
+    }
+    // "TORNA AI FIORDI!" label
+    ctx.fillStyle='#ffdd00'; ctx.font='bold 22px "Arial Black",Arial';
+    ctx.textAlign='center'; ctx.shadowColor='#ffaa00'; ctx.shadowBlur=10;
+    ctx.fillText('TORNA AI FIORDI! 🏔️', W/2, H*.2);
+    ctx.shadowBlur=0;
+
+  } else {
+    // Settled game over screen with Odin
+    drawViking(W/2, H*.44, 'fail_fall', bgTimer);
+    // Odin looms disapprovingly (top right corner)
+    const _ov=odinVisible; odinVisible=true;
+    drawOdin(bgTimer, W*.82, H*.32);
+    odinVisible=_ov;
+
+    ctx.fillStyle='rgba(20,0,30,.95)';
+    ctx.strokeStyle='#ff0044'; ctx.lineWidth=5;
+    ctx.shadowColor='#ff0044'; ctx.shadowBlur=18;
+    ctx.beginPath(); ctx.roundRect(20,55,W-40,175,18); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#ff4488'; ctx.font='bold 15px "Arial Black",Arial'; ctx.textAlign='center';
+    ctx.fillText('Hai profanato la Tumba al ritmo della Rumba:', W/2, 93);
+    ctx.fillStyle='#ffdd00'; ctx.font='bold 19px "Arial Black",Arial';
+    ctx.fillText('ODINO DISAPPROVA! ⚡', W/2, 124);
+    ctx.fillStyle='#aaffcc'; ctx.font='bold 14px "Arial Black",Arial';
+    ctx.fillText('Torna ai fiordi!', W/2, 153);
+    ctx.fillStyle='#aaa'; ctx.font='14px Arial';
+    ctx.fillText('Punteggio: '+score, W/2, 178);
+    ctx.fillText('Combo massima: '+maxCombo, W/2, 200);
+
+    ctx.fillStyle='rgba(200,50,50,.9)';
+    ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(W/2-100,H-180,200,52,26); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 20px "Arial Black",Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🔄  RIPROVA', W/2, H-154);
+    ctx.textBaseline='alphabetic';
+  }
   ctx.restore();
 }
 
@@ -877,16 +1395,19 @@ function startLevel(lvl){
 
 function gameOver(){
   stopBGM(); playSfx('gameover');
+  gameOverAnimT=0;
   state='gameover';
 }
 
 function levelWin(){
   stopBGM(); playSfx('win');
   if(level>=4){ state='victory'; }
+  else if(level===2){ setTimeout(startThorBonus, 800); }
   else { state='levelwin'; }
 }
 
 function pressDir(dir){
+  if(state==='thorbonus'){ pressThorDir(dir); return; }
   if(state!=='playing') return;
   pressedKeys[dir+'_flash']=.3;
 
@@ -918,6 +1439,7 @@ function pressDir(dir){
     playSfx('perfect');
     spawnFeedback('PERFETTO!', W/2, ARROW_Y_HIT-50, '#ffff00');
     vikingAnim={move:combo>=8?'combo':dir,timer:0.5};
+    if(combo>=5 && combo%5===0){ odinVisible=true; odinTimer=3.5; playSfx('odin'); showBubble('Per Valhalla, che ritmo! 🕺', 3.0); }
     if(combo>=8){ comboAnim=0.6; playSfx('combo'); showBubble('COMBO EPICA!\n'+combo+' di fila! 🔥'); }
   } else {
     playSfx('good');
@@ -975,6 +1497,8 @@ function updateGame(dt){
 
   // Bubble timer
   if(bubbleMsg){ bubbleMsg.timer-=dt; if(bubbleMsg.timer<=0) bubbleMsg=null; }
+  // Odin timer
+  if(odinVisible){ odinTimer-=dt; if(odinTimer<=0) odinVisible=false; }
 
   updateParticles(dt);
   updateFeedback(dt);
@@ -1005,6 +1529,7 @@ function drawGame(dt){
   drawViking(vx, vy, vikingAnim.timer>0?vikingAnim.move:'idle', bgTimer);
 
   drawParticles();
+  drawOdin(bgTimer);
   drawHUD();
   drawFeedback();
   if(bubbleMsg) drawBubble();
@@ -1019,13 +1544,16 @@ function loop(ts){
   ctx.clearRect(0,0,W,H);
 
   if(state==='title')    { drawTitle(dt); }
+  else if(state==='cutscene')  { drawBackground(dt); drawCutscene(dt); }
   else if(state==='playing'){
     updateGame(dt);
     drawGame(dt);
   }
+  else if(state==='thorbonus') { updateThorBonus(dt); drawBackground(dt); drawThorBonus(dt); }
   else if(state==='levelwin')  { drawLevelWin(dt); }
   else if(state==='gameover')  {
     drawBackground(dt);
+    gameOverAnimT+=dt;
     drawGameOver();
   }
   else if(state==='victory')   { drawVictory(dt); }
@@ -1078,12 +1606,17 @@ Object.entries(BTN_DIR).forEach(([id, dir])=>{
 function handleClick(cx,cy){
   initAudio();
   if(state==='title'){
-    // Start button area
-    if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(0);
+    if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128){ cutsceneStep=0; cutsceneTimer=0; state='cutscene'; }
+  } else if(state==='cutscene'){
+    // "Salta intro" button
+    if(cy>=H-82&&cy<=H-40){ startLevel(0); }
+    else { cutsceneStep++; cutsceneTimer=0; if(cutsceneStep>=4) startLevel(0); }
+  } else if(state==='thorbonus'){
+    if(thorPhase==='result') startLevel(level+1);
   } else if(state==='levelwin'){
     if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(level+1);
   } else if(state==='gameover'){
-    if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(level);
+    if(gameOverAnimT>=1.8&&cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(level);
   } else if(state==='victory'){
     if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128){ state='title'; stopBGM(); }
   }
@@ -1091,9 +1624,11 @@ function handleClick(cx,cy){
 
 function handleAction(){
   initAudio();
-  if(state==='title') startLevel(0);
+  if(state==='title'){ cutsceneStep=0; cutsceneTimer=0; state='cutscene'; }
+  else if(state==='cutscene'){ startLevel(0); }
+  else if(state==='thorbonus'){ if(thorPhase==='result') startLevel(level+1); }
   else if(state==='levelwin') startLevel(level+1);
-  else if(state==='gameover') startLevel(level);
+  else if(state==='gameover'){ if(gameOverAnimT>=1.8) startLevel(level); }
   else if(state==='victory'){ state='title'; stopBGM(); }
 }
 
