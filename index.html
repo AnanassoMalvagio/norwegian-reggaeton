@@ -241,6 +241,12 @@ let gameOverAnimT = 0;
 let thorSequence = [], thorShowIdx = 0, thorShowTimer = 0;
 let thorPhase = 'show'; // 'show'|'play'|'result'
 let thorInput = [], thorResult = null, thorResultTimer = 0;
+// ─── LOKI CURSE STATE ───
+let lokiState = 'none'; // 'none'|'freeze'|'inverted'|'ending'
+let lokiTimer = 0;
+let lokiUsedThisLevel = false;
+let lokiScheduleTimer = -1;
+let nextLifeThreshold = 15000;
 
 // ─────────────────────────────────────────────
 // ARROW GENERATION
@@ -859,7 +865,7 @@ function drawHUD(){
   ctx.font='bold 22px Arial';
   ctx.fillStyle='#ff3366';
   let livesStr='';
-  for(let i=0;i<3;i++) livesStr+=(i<lives)?'❤️':'🖤';
+  for(let i=0;i<5;i++) livesStr+=(i<lives)?'❤️':'🖤';
   ctx.textAlign='left'; ctx.fillText('Vite: '+livesStr, 10, 30);
   // Score
   ctx.fillStyle='#ffff00'; ctx.textAlign='right';
@@ -1007,7 +1013,7 @@ const CUTSCENE_PANELS = [
 function drawCutscene(dt){
   cutsceneTimer+=dt;
   // Auto-advance every 4s
-  if(cutsceneTimer>=4){ cutsceneTimer=0; cutsceneStep++; if(cutsceneStep>=4){ startLevel(0); return; } }
+  if(cutsceneTimer>=4){ cutsceneTimer=0; cutsceneStep++; if(cutsceneStep>=4){ startLevel(0,true); return; } }
   const p=CUTSCENE_PANELS[cutsceneStep];
   // Panel bg
   ctx.save();
@@ -1383,12 +1389,15 @@ function drawVictory(dt){
 // ─────────────────────────────────────────────
 let gameTime = 0;
 
-function startLevel(lvl){
-  level=lvl; lives=3; combo=0; arrows=[];
+function startLevel(lvl, resetLives=false){
+  if(resetLives){ lives=3; score=0; maxCombo=0; nextLifeThreshold=15000; }
+  lives=Math.min(lives,5);
+  level=lvl; combo=0; arrows=[];
   feedback=[]; particles=[]; bubbleMsg=null;
   levelArrows=genLevelArrows(lvl);
   arrowSpawnIdx=0; gameTime=0;
   vikingAnim={move:'idle',timer:0};
+  lokiState='none'; lokiTimer=0; lokiUsedThisLevel=false; lokiScheduleTimer=-1;
   startBGM(lvl);
   state='playing';
 }
@@ -1407,6 +1416,7 @@ function levelWin(){
 }
 
 function pressDir(dir){
+  if(lokiState==='inverted'){ const inv={up:'down',down:'up',left:'right',right:'left'}; dir=inv[dir]; }
   if(state==='thorbonus'){ pressThorDir(dir); return; }
   if(state!=='playing') return;
   pressedKeys[dir+'_flash']=.3;
@@ -1432,6 +1442,7 @@ function pressDir(dir){
   score+=pts*(1+Math.floor(combo/5));
   combo++;
   if(combo>maxCombo) maxCombo=combo;
+  while(score>=nextLifeThreshold){ nextLifeThreshold+=15000; if(lives<5){ lives++; showBubble('VITA EXTRA! ❤️',2.0); playSfx('win'); } }
 
   spawnParticles(COL_X[dir],ARROW_Y_HIT,COLORS[dir],perfect?14:8);
 
@@ -1450,6 +1461,19 @@ function pressDir(dir){
 
 function updateGame(dt){
   if(state!=='playing') return;
+
+  // ── LOKI FREEZE: gioco in pausa ──
+  if(lokiState==='freeze'){
+    lokiTimer-=dt;
+    if(lokiTimer<=0){ lokiState='inverted'; lokiTimer=8; }
+    updateParticles(dt); updateFeedback(dt);
+    if(bubbleMsg){ bubbleMsg.timer-=dt; if(bubbleMsg.timer<=0) bubbleMsg=null; }
+    return;
+  }
+  // ── LOKI INVERTED / ENDING ──
+  if(lokiState==='inverted'){ lokiTimer-=dt; if(lokiTimer<=0){ lokiState='ending'; lokiTimer=1.8; showBubble('La maledizione è terminata! ✨',1.8); } }
+  if(lokiState==='ending'){ lokiTimer-=dt; if(lokiTimer<=0) lokiState='none'; }
+
   gameTime+=dt;
 
   // Decay flash
@@ -1500,8 +1524,134 @@ function updateGame(dt){
   // Odin timer
   if(odinVisible){ odinTimer-=dt; if(odinTimer<=0) odinVisible=false; }
 
+  // ── PROGRAMMA LA MALEDIZIONE DI LOKI ──
+  if(level>=3&&score>15000&&!lokiUsedThisLevel&&lokiScheduleTimer<0&&lokiState==='none'){
+    lokiScheduleTimer=gameTime+2+Math.random()*10;
+  }
+  if(lokiScheduleTimer>0&&gameTime>=lokiScheduleTimer&&lokiState==='none'){
+    lokiState='freeze'; lokiTimer=3; lokiUsedThisLevel=true; lokiScheduleTimer=-1;
+    playSfx('thunder');
+  }
+
   updateParticles(dt);
   updateFeedback(dt);
+}
+
+// ─────────────────────────────────────────────
+// MALEDIZIONE DI LOKI
+// ─────────────────────────────────────────────
+function drawLokiFace(cx, cy, t){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1.8, 1.8);
+
+  // Testa — colorazione verdastra malvagia
+  ctx.fillStyle='#b8d4a0';
+  ctx.beginPath(); ctx.ellipse(0,0,30,34,0,0,Math.PI*2); ctx.fill();
+
+  // Elmo
+  ctx.fillStyle='#888';
+  ctx.beginPath(); ctx.ellipse(0,-18,32,18,0,Math.PI,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#aaa'; ctx.fillRect(-34,-18,68,6);
+  // Corna alte e curve stile Loki
+  ctx.fillStyle='#ddd8f0';
+  ctx.beginPath(); ctx.moveTo(-22,-18); ctx.bezierCurveTo(-35,-50,-20,-75,-8,-80); ctx.bezierCurveTo(-6,-75,-8,-50,-22,-18); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(22,-18);  ctx.bezierCurveTo(35,-50,20,-75,8,-80);   ctx.bezierCurveTo(6,-75,8,-50,22,-18);  ctx.fill();
+  ctx.strokeStyle='#bbb'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-22,-18); ctx.bezierCurveTo(-35,-50,-20,-75,-8,-80); ctx.bezierCurveTo(-6,-75,-8,-50,-22,-18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(22,-18);  ctx.bezierCurveTo(35,-50,20,-75,8,-80);   ctx.bezierCurveTo(6,-75,8,-50,22,-18);  ctx.stroke();
+
+  // Sopracciglia arrabbiate
+  ctx.fillStyle='#222';
+  ctx.beginPath(); ctx.moveTo(-18,-8); ctx.lineTo(-6,-4); ctx.lineTo(-6,-1); ctx.lineTo(-18,-5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(18,-8);  ctx.lineTo(6,-4);  ctx.lineTo(6,-1);  ctx.lineTo(18,-5);  ctx.closePath(); ctx.fill();
+
+  // Occhi — stretti e malvagi
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.ellipse(-10,2,7,5,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,2,7,5,0,0,Math.PI*2);  ctx.fill();
+  ctx.fillStyle='#b8d4a0';
+  ctx.beginPath(); ctx.ellipse(-10,-1,7,3,0,Math.PI,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,-1,7,3,0,Math.PI,Math.PI*2);  ctx.fill();
+  ctx.fillStyle='#88ff44'; ctx.shadowColor='#00ff00'; ctx.shadowBlur=8;
+  ctx.beginPath(); ctx.ellipse(-10,3,3,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10,3,3,3,0,0,Math.PI*2);  ctx.fill();
+  ctx.shadowBlur=0;
+
+  // Bocca corrucciata con denti
+  ctx.strokeStyle='#550000'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.arc(0,18,10,Math.PI+.3,Math.PI*2-.3,true); ctx.stroke();
+  ctx.fillStyle='#eee';
+  ctx.fillRect(-8,16,5,5); ctx.fillRect(-2,15,5,6); ctx.fillRect(4,16,5,5);
+  ctx.strokeStyle='#888'; ctx.lineWidth=1;
+  ctx.strokeRect(-8,16,5,5); ctx.strokeRect(-2,15,5,6); ctx.strokeRect(4,16,5,5);
+
+  // Naso
+  ctx.fillStyle='#a8c490';
+  ctx.beginPath(); ctx.ellipse(0,10,5,4,0,0,Math.PI*2); ctx.fill();
+
+  // Fulmini sulle guance
+  ctx.strokeStyle='#ffff44'; ctx.lineWidth=1.5; ctx.shadowColor='#ffff00'; ctx.shadowBlur=5;
+  ctx.beginPath(); ctx.moveTo(-20,6); ctx.lineTo(-16,12); ctx.lineTo(-19,12); ctx.lineTo(-15,18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(20,6);  ctx.lineTo(16,12);  ctx.lineTo(19,12);  ctx.lineTo(15,18);  ctx.stroke();
+  ctx.shadowBlur=0;
+
+  ctx.restore();
+}
+
+function drawLokiScreen(t){
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,20,.88)'; ctx.fillRect(0,0,W,H);
+
+  // Bordo animato
+  const pulse=.5+.5*Math.sin(t*8);
+  ctx.strokeStyle=`rgba(200,100,255,${.5+.4*pulse})`; ctx.lineWidth=6;
+  ctx.shadowColor='#aa00ff'; ctx.shadowBlur=20*pulse;
+  ctx.beginPath(); ctx.roundRect(10,10,W-20,H-20,18); ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // Faccia di Loki
+  drawLokiFace(W/2, H*.37, t);
+
+  // Box testo maledizione
+  ctx.fillStyle='rgba(0,0,40,.92)'; ctx.strokeStyle='#aa00ff'; ctx.lineWidth=4;
+  ctx.shadowColor='#8800ff'; ctx.shadowBlur=15;
+  ctx.beginPath(); ctx.roundRect(15,H*.62,W-30,105,14); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur=0;
+
+  const fs=17+Math.sin(t*5)*1.5;
+  ctx.font=`bold ${Math.floor(fs)}px "Arial Black",Arial`;
+  ctx.fillStyle='#ffdd00'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.shadowColor='#ffaa00'; ctx.shadowBlur=10;
+  ctx.fillText('⚡ LA MALEDIZIONE DI LOKI ⚡', W/2, H*.655);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#ff88ff'; ctx.font='bold 14px "Arial Black",Arial';
+  ctx.shadowColor='#cc00ff'; ctx.shadowBlur=8;
+  ctx.fillText('LE FRECCE SONO INVERTITE!', W/2, H*.69);
+  ctx.shadowBlur=0;
+
+  // Countdown
+  const secs=Math.max(1,Math.ceil(lokiTimer));
+  ctx.font='bold 54px "Arial Black",Arial';
+  const hue=Math.floor((3-lokiTimer)/3*120);
+  ctx.fillStyle=`hsl(${hue},100%,65%)`; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=30;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(secs, W/2, H*.83);
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+function drawLokiInvertedHUD(){
+  const secs=Math.max(0,Math.ceil(lokiTimer));
+  ctx.save();
+  ctx.fillStyle='rgba(60,0,70,.88)'; ctx.strokeStyle='#cc00ff'; ctx.lineWidth=3;
+  ctx.shadowColor='#aa00ff'; ctx.shadowBlur=12;
+  ctx.beginPath(); ctx.roundRect(W/2-120,46,240,52,14); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#ff88ff'; ctx.font='bold 13px "Arial Black",Arial';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`⚡ FRECCE INVERTITE! ${secs}s ⚡`, W/2, 72);
+  ctx.restore();
 }
 
 function drawGame(dt){
@@ -1531,8 +1681,10 @@ function drawGame(dt){
   drawParticles();
   drawOdin(bgTimer);
   drawHUD();
+  if(lokiState==='inverted') drawLokiInvertedHUD();
   drawFeedback();
   if(bubbleMsg) drawBubble();
+  if(lokiState==='freeze') drawLokiScreen(bgTimer);
 }
 
 // ─────────────────────────────────────────────
@@ -1609,14 +1761,14 @@ function handleClick(cx,cy){
     if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128){ cutsceneStep=0; cutsceneTimer=0; state='cutscene'; }
   } else if(state==='cutscene'){
     // "Salta intro" button
-    if(cy>=H-82&&cy<=H-40){ startLevel(0); }
-    else { cutsceneStep++; cutsceneTimer=0; if(cutsceneStep>=4) startLevel(0); }
+    if(cy>=H-82&&cy<=H-40){ startLevel(0,true); }
+    else { cutsceneStep++; cutsceneTimer=0; if(cutsceneStep>=4) startLevel(0,true); }
   } else if(state==='thorbonus'){
     if(thorPhase==='result') startLevel(level+1);
   } else if(state==='levelwin'){
     if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(level+1);
   } else if(state==='gameover'){
-    if(gameOverAnimT>=1.8&&cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(level);
+    if(gameOverAnimT>=1.8&&cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128) startLevel(level,true);
   } else if(state==='victory'){
     if(cx>=W/2-100&&cx<=W/2+100&&cy>=H-180&&cy<=H-128){ state='title'; stopBGM(); }
   }
@@ -1625,10 +1777,10 @@ function handleClick(cx,cy){
 function handleAction(){
   initAudio();
   if(state==='title'){ cutsceneStep=0; cutsceneTimer=0; state='cutscene'; }
-  else if(state==='cutscene'){ startLevel(0); }
+  else if(state==='cutscene'){ startLevel(0,true); }
   else if(state==='thorbonus'){ if(thorPhase==='result') startLevel(level+1); }
   else if(state==='levelwin') startLevel(level+1);
-  else if(state==='gameover'){ if(gameOverAnimT>=1.8) startLevel(level); }
+  else if(state==='gameover'){ if(gameOverAnimT>=1.8) startLevel(level,true); }
   else if(state==='victory'){ state='title'; stopBGM(); }
 }
 
